@@ -1,0 +1,51 @@
+{
+  "variant": "full",
+  "classes": [
+    "A001",
+    "A002",
+    "A003",
+    "A004",
+    "A005",
+    "A006",
+    "A007",
+    "A008",
+    "A009",
+    "A010",
+    "A011",
+    "A012",
+    "A013",
+    "A014",
+    "A015",
+    "A016",
+    "A017"
+  ],
+  "n_features": 1543,
+  "sequence_steps": 30,
+  "min_valid_frames": 10,
+  "min_core_conf": 0.3,
+  "target_fps": 30,
+  "pose_weights": "yolo11n-pose.pt",
+  "person_selection": "largest bbox per frame",
+  "feature_module": "ai_service/services/action_features.py",
+  "feature_columns_subset": false,
+  "rf_params": {
+    "n_estimators": 300,
+    "max_depth": null,
+    "min_samples_leaf": 1,
+    "class_weight": "balanced",
+    "n_jobs": -1,
+    "random_state": 42
+  },
+  "train_subjects": [
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05"
+  ],
+  "train_clips": 238,
+  "flip_augmentation": false,
+  "loso_accuracy": 0.782,
+  "loso_macro_f1": 0.777,
+  "sklearn_version": "1.9.1"
+}
