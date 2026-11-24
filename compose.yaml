@@ -1,0 +1,87 @@
+name: vision_action_platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  fastapi:
+    build: ./ai_service
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      MAX_VIDEO_SECONDS: ${MAX_VIDEO_SECONDS:-60}
+    ports:
+      - "8001:8001"   # 개발용 Swagger(/docs) 확인. 배포 시에는 제거해도 됩니다.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  django:
+    build: ./backend
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      AI_SERVICE_URL: http://fastapi:8001
+      MEDIA_ROOT: /app/media
+    volumes:
+      - media_data:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery:
+    build: ./backend
+    command: celery -A config worker -l info --concurrency=1
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      AI_SERVICE_URL: http://fastapi:8001
+      MEDIA_ROOT: /app/media
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
+      django:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_data:
