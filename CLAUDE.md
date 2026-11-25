@@ -62,8 +62,8 @@ docker compose logs -f celery fastapi                 # 작업 흐름 확인
 - WSL 터미널이 지워진 폴더를 가리키면 `Unable to read current working directory`가 난다. `cd`로 다시 들어간다.
 
 ## 남은 일
-- 집 컴퓨터에서 `docker compose up --build`로 PyTorch CPU 설치(download.pytorch.org)가 되는지 확인 (클라우드 세션에서는 그 주소가 막혀 PyPI 버전으로만 검증함)
-- 휴대폰 IP Webcam 앱으로 실제 카메라 분석 확인 (같은 와이파이, Celery 컨테이너에서 휴대폰 IP로 접속 가능해야 함)
+- (완료 2026-11-25) 집 컴퓨터 Docker 빌드: 5개 서비스 정상, PyTorch `2.15.0+cpu`
+- (완료 2026-11-25) 휴대폰 IP Webcam 실제 분석 COMPLETED. 개선 후보: 1초 미만 Track 제외, ByteTrack `track_buffer` 늘리기, Sliding Window 추론
 - README 7장 캡처 넣기: 정상 1건, 실패 1건, 관리자 화면·대시보드. 캡처에 카메라 주소나 비밀번호가 보이지 않게 한다.
 - 발표 준비: README 순서(아키텍처 → ERD → 버튼 흐름 → 시연 → 겪은 오류 하나)
 - 검수가 끝나면 사용자에게 물어보고 `main`에 합치기(Pull Request)

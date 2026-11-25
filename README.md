@@ -52,9 +52,12 @@ flowchart LR
     U -- "⑨ 상태·결과 조회 (2초마다)" --> D
     D -- "조회" --> P
     D <-. "업로드 영상 공유 볼륨 media_data" .-> C
+    CAM -. "미리보기: 현재 화면 1장 (shot.jpg)" .-> D
+    D -. "미리보기: 관절 좌표 요청 (/predict/pose-frame)" .-> F
 ```
 
 - **FastAPI**는 추론만 하고 DB에 접근하지 않습니다. 결과 저장은 Celery Worker가 Django ORM으로 합니다.
+- 점선 중 '미리보기' 두 줄은 IP Webcam 탭의 실시간 화면·스켈레톤 표시용입니다. 결과를 저장하지 않으며, 분석에는 ⑤에서 수집한 영상만 씁니다.
 - 컨테이너끼리는 `localhost`가 아니라 서비스 이름(`postgres`, `redis`, `fastapi`)으로 접속합니다.
 
 ## 4. DB 설계 (ERD)
@@ -187,6 +190,7 @@ sequenceDiagram
 | T01 모델 불러오기 | `/health` | 17개 Class, Feature 1,543개 확인 |
 | T02 영상 업로드 | S05_A009_T02.mp4 (11초) | 202 응답(0.4초) → PROCESSING → COMPLETED, A009 (0.70) |
 | T03 IP Webcam | 가짜 MJPEG 카메라(A001 영상 반복), 4초 수집 | COMPLETED, A001 (0.29, 판단 불확실) |
+| T03-2 실제 휴대폰 | IP Webcam 앱(같은 와이파이), 8초 수집, 앞차기 수행 | COMPLETED, 1순위 A003 앞차기(정답). 몸이 화면 밖으로 나가면 한 사람이 Track 여러 개로 나뉨 → 전신이 보이게 촬영 |
 | T04 사람별 결과 | 두 사람을 나란히 붙인 영상 | 작업 1건에 Track 1·2 두 행 저장 |
 | T05 비동기 | 업로드 직후 | 웹 서버가 작업 ID를 바로 반환, 처리는 Worker가 함 |
 | T06 영구 저장 | `docker compose down` → `up` | 작업·예측·영상 그대로 남음 |
@@ -194,8 +198,11 @@ sequenceDiagram
 | T08 관리자 | admin 계정 | 전체 작업 목록, 동작별 막대·상태별 원형 차트 |
 | T09 예외 처리 | `.txt` 파일, 허용 안 된 카메라, 깨진 MP4, FastAPI 중단 | 400 / 400 / FAILED `video_open_failed` / 10초 간격 3번 재시도 후 FAILED `ai_unreachable` |
 | T10 Docker | 5개 서비스 재시작 | PostgreSQL 데이터 유지, 서비스 재연결 |
+| T11 Docker 빌드 | `docker compose up --build -d` (Windows + WSL, Docker Desktop) | 5개 서비스 healthy/running, PyTorch `2.15.0+cpu`(download.pytorch.org) |
+| T12 미리보기·스켈레톤 | IP Webcam 탭 | 한 장에 약 0.18초(관절 검출 약 26ms). 영상 분석 중에는 관절 표시를 멈췄다가 끝나면 다시 표시. 페이지에 카메라 주소 없음 |
+| T13 동작 이름 변경 | 이름 표 변경(번호는 그대로) | 저장된 예측도 새 이름·영어 이름으로 바뀜(마이그레이션 0003), 재학습 없음 |
 
-자동 테스트: `docker compose exec django python manage.py test` (18개)
+자동 테스트: `docker compose exec django python manage.py test` (28개. 저장소의 `ai_service` 파일과 이름을 비교하는 2개는 backend 컨테이너 안에서는 건너뜀)
 
 ## 폴더 구조
 
