@@ -28,6 +28,10 @@
           <label>수집 시간(초)
             <input type="number" name="capture_seconds" min="3" max="15" step="1" value="{{ capture_seconds|floatformat:0 }}">
           </label>
+          <div class="camera-preview">
+            <img id="camera-preview" alt="카메라 미리보기">
+            <p class="muted" id="camera-preview-status">카메라 화면을 불러오는 중…</p>
+          </div>
           <p class="muted">‘AI 분석 시작’을 누르면 서버가 카메라에 연결해 정해진 시간 동안 영상을 모읍니다. 그동안 카메라 앞에서 동작을 하세요.</p>
         {% else %}
           <p class="error">설정된 카메라가 없습니다. 관리자가 .env의 ALLOWED_CAMERAS에 카메라를 등록해야 합니다.</p>

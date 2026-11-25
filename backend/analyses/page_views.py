@@ -1,10 +1,13 @@
 """HTML 화면: 사용자 분석 화면과 관리자 전용 대시보드(실제 DB 집계)."""
 
+from urllib.parse import urlsplit
+
+import requests
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count
 from django.core.exceptions import PermissionDenied
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import render
 from django.views.static import serve
 
@@ -20,6 +23,30 @@ def protected_media(request, path):
     if not jobs.exists():
         raise Http404
     return serve(request, path, document_root=settings.MEDIA_ROOT)
+
+
+@login_required
+def camera_snapshot(request, name):
+    """허용된 카메라의 현재 화면 한 장(JPG)을 대신 받아 전달한다(미리보기용).
+
+    - 브라우저는 카메라 '이름'만 알고, 실제 주소는 서버 설정(ALLOWED_CAMERAS)에만 있다.
+    - IP Webcam 앱의 /shot.jpg를 쓴다. 같은 주소(host:port)만 호출하고 다른 곳으로의 이동(redirect)은 따라가지 않는다.
+    - 연속 스트리밍이 아니라 짧은 요청이므로 gunicorn 작업자를 오래 붙잡지 않는다.
+    """
+    url = settings.ALLOWED_CAMERAS.get(name)
+    if not url:
+        raise Http404
+    parts = urlsplit(url)
+    shot_url = f"{parts.scheme}://{parts.netloc}/shot.jpg"
+    try:
+        r = requests.get(shot_url, timeout=3, allow_redirects=False)
+    except requests.RequestException:
+        return HttpResponse("camera_unreachable", status=502, content_type="text/plain")
+    if r.status_code != 200 or not r.headers.get("Content-Type", "").startswith("image/"):
+        return HttpResponse("camera_bad_response", status=502, content_type="text/plain")
+    res = HttpResponse(r.content, content_type="image/jpeg")
+    res["Cache-Control"] = "no-store"
+    return res
 
 
 @login_required

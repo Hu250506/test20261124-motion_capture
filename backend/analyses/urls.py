@@ -12,5 +12,6 @@ app_name = "analyses"
 urlpatterns = [
     path("analyses/", page_views.index, name="index"),
     path("dashboard/", page_views.dashboard, name="dashboard"),
+    path("cameras/<str:name>/snapshot.jpg", page_views.camera_snapshot, name="camera_snapshot"),
     path("api/v1/", include(router.urls)),
 ]

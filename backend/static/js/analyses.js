@@ -20,8 +20,48 @@
       const mode = tab.dataset.mode;
       form.input_type.value = mode;
       document.querySelectorAll(".mode").forEach((m) => (m.hidden = !m.classList.contains("mode-" + mode)));
+      mode === "CAMERA" ? startPreview() : stopPreview();
     })
   );
+
+  // ── 카메라 미리보기: 서버를 거쳐 현재 화면(JPG)을 계속 다시 받아 온다 ──
+  // 브라우저는 카메라 주소를 모르고 이름만 보낸다. 한 장을 다 받으면 다음 장을 요청한다.
+  const previewImg = document.getElementById("camera-preview");
+  const previewStatus = document.getElementById("camera-preview-status");
+  let previewOn = false;
+  let previewTimer = null;
+
+  function nextFrame(delay) {
+    clearTimeout(previewTimer);
+    if (!previewOn) return;
+    previewTimer = setTimeout(() => {
+      const name = form.camera_name && form.camera_name.value;
+      if (!previewOn || !name || document.hidden) return nextFrame(500);
+      previewImg.src = `/cameras/${encodeURIComponent(name)}/snapshot.jpg?t=${Date.now()}`;
+    }, delay);
+  }
+  function startPreview() {
+    if (!previewImg || previewOn) return;
+    previewOn = true;
+    nextFrame(0);
+  }
+  function stopPreview() {
+    previewOn = false;
+    clearTimeout(previewTimer);
+  }
+  if (previewImg) {
+    previewImg.addEventListener("load", () => {
+      previewStatus.textContent = "실시간 미리보기 (분석에는 쓰이지 않음)";
+      previewImg.hidden = false;
+      nextFrame(150);
+    });
+    previewImg.addEventListener("error", () => {
+      previewStatus.textContent = "카메라에 연결할 수 없습니다. 휴대폰 IP Webcam 앱이 켜져 있는지 확인하세요. 3초 뒤 다시 시도합니다.";
+      previewImg.hidden = true;
+      nextFrame(3000);
+    });
+    form.camera_name && form.camera_name.addEventListener("change", () => nextFrame(0));
+  }
 
   // ── 작업 등록 ──
   form.addEventListener("submit", async (e) => {

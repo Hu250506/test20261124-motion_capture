@@ -203,3 +203,37 @@ class PageTests(Base):
         self.assertEqual(self.client.get(url).status_code, 404)
         self.client.force_login(self.a)
         self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class CameraSnapshotTests(Base):
+    """카메라 미리보기: 로그인 필요, 허용 목록의 이름만, 주소는 서버에만."""
+
+    url = "/cameras/lab-phone/snapshot.jpg"
+
+    def test_requires_login(self):
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    def test_unknown_camera_is_404(self):
+        self.client.force_login(self.a)
+        self.assertEqual(self.client.get("/cameras/other/snapshot.jpg").status_code, 404)
+
+    @mock.patch("analyses.page_views.requests.get")
+    def test_returns_jpeg_from_allowed_camera_only(self, get):
+        get.return_value = mock.Mock(status_code=200, headers={"Content-Type": "image/jpeg"}, content=b"\xff\xd8jpg")
+        self.client.force_login(self.a)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Content-Type"], "image/jpeg")
+        self.assertEqual(res.content, b"\xff\xd8jpg")
+        # 허용 목록의 host:port에만, redirect를 따라가지 않고 요청한다
+        get.assert_called_once_with("http://10.0.0.5:8080/shot.jpg", timeout=3, allow_redirects=False)
+
+    @mock.patch("analyses.page_views.requests.get")
+    def test_camera_down_is_502(self, get):
+        import requests
+        get.side_effect = requests.ConnectionError()
+        self.client.force_login(self.a)
+        self.assertEqual(self.client.get(self.url).status_code, 502)
+        get.side_effect = None
+        get.return_value = mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, content=b"<html>")
+        self.assertEqual(self.client.get(self.url).status_code, 502)
