@@ -1,5 +1,6 @@
 // 분석 화면: 작업 등록(POST) → 작업 ID로 상태 조회(2초마다) → 완료되면 결과 표시
 (function () {
+  const ACTION_NAMES = JSON.parse(document.getElementById("action-names").textContent);
   const API = "/api/v1/analyses/";
   const form = document.getElementById("analysis-form");
   const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
@@ -114,7 +115,7 @@
     if (job.status !== "COMPLETED") return "";
     const rows = job.predictions.map((p) => {
       const pct = Math.round(p.confidence * 100);
-      const top = p.top3.map((t) => `${esc(t.action_label)} ${Math.round(t.confidence * 100)}%`).join(" · ");
+      const top = p.top3.map((t) => `${esc(t.action_label)} ${esc(ACTION_NAMES[t.action_label] || "")} ${Math.round(t.confidence * 100)}%`).join(" · ");
       return `<tr>
         <td>${p.track_id}</td>
         <td><strong>${esc(p.action_label)}</strong>${p.action_name ? " " + esc(p.action_name) : ""}
@@ -128,7 +129,7 @@
       job.video_duration_sec != null ? `영상 ${job.video_duration_sec.toFixed(1)}초` : "",
       job.ai_processing_sec != null ? `AI 추론 ${job.ai_processing_sec.toFixed(1)}초` : "",
       job.total_seconds != null ? `전체 ${job.total_seconds.toFixed(1)}초` : "",
-      job.expected_action ? `수행한 동작(선택) ${esc(job.expected_action)}` : "",
+      job.expected_action ? `수행한 동작(선택) ${esc(job.expected_action)} ${esc(ACTION_NAMES[job.expected_action] || "")}` : "",
     ].filter(Boolean).join(" · ");
     return `<p class="muted">${meta}</p>
       <table class="table"><thead><tr><th>Track ID</th><th>예측 동작</th><th>신뢰도</th><th>후보 Top 3</th><th>유효 Frame</th></tr></thead>
@@ -145,7 +146,7 @@
     const page = await res.json();
     if (!page.results.length) return (tbody.innerHTML = `<tr><td colspan="7" class="muted">아직 분석 기록이 없습니다.</td></tr>`);
     tbody.innerHTML = page.results.map((j) => {
-      const preds = j.predictions.map((p) => `T${p.track_id}:${esc(p.action_label)} ${Math.round(p.confidence * 100)}%`).join(", ");
+      const preds = j.predictions.map((p) => `T${p.track_id}: ${esc(p.action_label)} ${esc(p.action_name)} ${Math.round(p.confidence * 100)}%`).join(", ");
       return `<tr>
         <td>${j.id}</td><td>${esc(j.title) || '<span class="muted">-</span>'}</td><td>${esc(j.input_type_display)}</td>
         <td>${badge(j.status, j.status_display)}</td><td>${preds || (j.status === "FAILED" ? esc(j.error_code) : "")}</td>

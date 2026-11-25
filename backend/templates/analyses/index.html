@@ -36,7 +36,7 @@
 
       <label>제목 (선택) <input type="text" name="title" maxlength="100"></label>
       <label>수행한 동작 (선택, 비교용이며 정답으로 쓰지 않음)
-        <select name="expected_action"><option value="">선택 안 함</option>{% for a in actions %}<option>{{ a }}</option>{% endfor %}</select>
+        <select name="expected_action"><option value="">선택 안 함</option>{% for code, label in actions %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select>
       </label>
 
       <button type="submit" class="primary" id="start-btn">AI 분석 시작</button>
@@ -63,5 +63,6 @@
 </section>
 {% endblock %}
 {% block scripts %}
+{{ action_names|json_script:"action-names" }}
 <script src="{% static 'js/analyses.js' %}"></script>
 {% endblock %}

@@ -8,7 +8,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.views.static import serve
 
-from .models import ACTION_CHOICES, AnalysisJob, PersonPrediction
+from .models import ACTION_CHOICES, ACTION_NAMES, AnalysisJob, PersonPrediction
 
 
 @login_required
@@ -27,7 +27,8 @@ def index(request):
     return render(request, "analyses/index.html", {
         "cameras": list(settings.ALLOWED_CAMERAS.keys()),
         "capture_seconds": settings.CAMERA_CAPTURE_SECONDS,
-        "actions": [a for a, _ in ACTION_CHOICES],
+        "actions": ACTION_CHOICES,  # (A001, "A001 키오스크 내려치기")
+        "action_names": ACTION_NAMES,
         "max_upload_mb": settings.MAX_UPLOAD_MB,
     })
 
@@ -39,8 +40,8 @@ def dashboard(request):
         raise PermissionDenied("관리자만 볼 수 있습니다.")
     # 1) 동작별 예측 건수 (17개 모두 표시, 0건 포함)
     counts = dict(PersonPrediction.objects.values_list("action_label").annotate(n=Count("id")))
-    action_labels = [a for a, _ in ACTION_CHOICES]
-    action_counts = [counts.get(a, 0) for a in action_labels]
+    action_labels = [label for _, label in ACTION_CHOICES]          # "A001 키오스크 내려치기"
+    action_counts = [counts.get(code, 0) for code, _ in ACTION_CHOICES]
 
     # 2) 상태별 작업 건수
     status_rows = dict(AnalysisJob.objects.values_list("status").annotate(n=Count("id")))

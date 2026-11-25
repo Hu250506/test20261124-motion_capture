@@ -78,6 +78,7 @@ button { font: inherit; cursor: pointer; }
 .stat strong { font-size: 1.6rem; }
 .stat small { display: block; color: var(--muted); }
 .chart { position: relative; height: 300px; }
+.chart.tall { height: 460px; }
 
 @media (max-width: 600px) {
   .container { margin-top: 1rem; }

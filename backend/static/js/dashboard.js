@@ -10,12 +10,13 @@
     type: "bar",
     data: {
       labels: data.actions.labels,
-      datasets: [{ label: "예측 건수", data: data.actions.counts, backgroundColor: color("--accent"), borderRadius: 4, maxBarThickness: 28 }],
+      datasets: [{ label: "예측 건수", data: data.actions.counts, backgroundColor: color("--accent"), borderRadius: 4, maxBarThickness: 18 }],
     },
     options: {
+      indexAxis: "y", // 동작 이름이 길어서 가로 막대로 표시
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false }, ticks: { autoSkip: false } } },
     },
   });
 
