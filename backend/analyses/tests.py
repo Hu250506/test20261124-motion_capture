@@ -237,3 +237,56 @@ class CameraSnapshotTests(Base):
         get.side_effect = None
         get.return_value = mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, content=b"<html>")
         self.assertEqual(self.client.get(self.url).status_code, 502)
+
+
+class CameraPoseTests(Base):
+    """스켈레톤 표시: 사진과 관절을 한 응답으로, FastAPI가 안 되면 사진만."""
+
+    url = "/cameras/lab-phone/pose.json"
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.a)
+
+    def shot(self):
+        return mock.Mock(status_code=200, headers={"Content-Type": "image/jpeg"}, content=b"\xff\xd8jpg")
+
+    def test_requires_login_and_allowed_name(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+        self.client.force_login(self.a)
+        self.assertEqual(self.client.get("/cameras/other/pose.json").status_code, 404)
+
+    @mock.patch("analyses.page_views.requests.post")
+    @mock.patch("analyses.page_views.requests.get")
+    def test_returns_image_and_persons(self, get, post):
+        get.return_value = self.shot()
+        person = {"box": [1, 2, 3, 4], "confidence": 0.9, "keypoints": [[1, 2, 0.9]] * 17}
+        post.return_value = mock.Mock(status_code=200, json=lambda: {"persons": [person]})
+        with override_settings(AI_SERVICE_URL="http://fastapi:8001"):
+            data = self.client.get(self.url).json()
+        self.assertEqual(data["pose_status"], "ok")
+        self.assertEqual(data["persons"], [person])
+        self.assertTrue(data["image"].startswith("data:image/jpeg;base64,"))
+        self.assertEqual(post.call_args.args[0], "http://fastapi:8001/predict/pose-frame")
+
+    @mock.patch("analyses.page_views.requests.post")
+    @mock.patch("analyses.page_views.requests.get")
+    def test_ai_busy_or_down_still_returns_image(self, get, post):
+        import requests
+        get.return_value = self.shot()
+        post.return_value = mock.Mock(status_code=503, headers={"Content-Type": "application/json"},
+                                      json=lambda: {"detail": {"code": "analysis_running"}})
+        data = self.client.get(self.url).json()
+        self.assertEqual((data["pose_status"], data["persons"]), ("analysis_running", None))
+        post.side_effect = requests.ConnectionError()
+        data = self.client.get(self.url).json()
+        self.assertEqual(data["pose_status"], "ai_unavailable")
+        self.assertIn("image", data)
+
+    @mock.patch("analyses.page_views.requests.get")
+    def test_camera_down_is_502(self, get):
+        import requests
+        get.side_effect = requests.ConnectionError()
+        res = self.client.get(self.url)
+        self.assertEqual((res.status_code, res.json()["error"]), (502, "camera_unreachable"))

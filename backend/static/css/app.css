@@ -87,4 +87,4 @@ button { font: inherit; cursor: pointer; }
 
 /* IP Webcam 미리보기 */
 .camera-preview { margin: .5rem 0; }
-.camera-preview img { display: block; width: 100%; max-height: 360px; object-fit: contain; background: #000; border-radius: 6px; }
+.camera-preview canvas { display: block; width: 100%; max-height: 360px; object-fit: contain; background: #000; border-radius: 6px; }

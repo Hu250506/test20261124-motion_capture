@@ -24,43 +24,117 @@
     })
   );
 
-  // ── 카메라 미리보기: 서버를 거쳐 현재 화면(JPG)을 계속 다시 받아 온다 ──
-  // 브라우저는 카메라 주소를 모르고 이름만 보낸다. 한 장을 다 받으면 다음 장을 요청한다.
-  const previewImg = document.getElementById("camera-preview");
+  // ── 카메라 미리보기: 서버를 거쳐 현재 화면을 계속 다시 받아 온다 ──
+  // 브라우저는 카메라 주소를 모르고 이름만 보낸다. 한 장을 다 그리면 다음 장을 요청한다.
+  // '관절 표시'를 켜면 같은 사진의 관절 좌표(FastAPI YOLO Pose)도 받아 그 위에 그린다.
+  const canvas = document.getElementById("camera-preview");
   const previewStatus = document.getElementById("camera-preview-status");
+  const poseToggle = document.getElementById("pose-toggle");
+  // COCO 17 관절: 0 코 1 왼눈 2 오른눈 3 왼귀 4 오른귀 5 왼어깨 6 오른어깨 7 왼팔꿈치 8 오른팔꿈치
+  // 9 왼손목 10 오른손목 11 왼골반 12 오른골반 13 왼무릎 14 오른무릎 15 왼발목 16 오른발목
+  const BONES = [[0, 1], [0, 2], [1, 3], [2, 4], [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
+    [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+  const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fbbf24", "#a78bfa", "#fb7185"];
+  const KP_MIN_CONF = 0.3; // 학습 때와 같은 관절 신뢰도 기준
+  const POSE_STATUS = {
+    analysis_running: "영상 분석 중이라 관절 표시를 잠시 멈췄습니다.",
+    pose_busy: "관절 검출 요청이 밀려 있습니다.",
+    ai_unavailable: "AI 서비스에 연결할 수 없어 관절을 표시하지 못했습니다.",
+  };
   let previewOn = false;
   let previewTimer = null;
 
-  function nextFrame(delay) {
-    clearTimeout(previewTimer);
+  const loadImage = (src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+
+  function drawPersons(ctx, persons, w) {
+    const lw = Math.max(2, w / 320);
+    persons.forEach((p, i) => {
+      const color = COLORS[i % COLORS.length];
+      const kp = p.keypoints;
+      const ok = (j) => kp[j] && kp[j][2] >= KP_MIN_CONF;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = lw;
+      const [x1, y1, x2, y2] = p.box;
+      ctx.setLineDash([lw * 3, lw * 2]);
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ctx.setLineDash([]);
+      ctx.font = `bold ${Math.round(lw * 7)}px sans-serif`;
+      ctx.fillText(`사람 ${i + 1}`, x1 + lw, Math.max(lw * 8, y1 - lw * 2));
+      BONES.forEach(([a, b]) => {
+        if (!ok(a) || !ok(b)) return;
+        ctx.beginPath();
+        ctx.moveTo(kp[a][0], kp[a][1]);
+        ctx.lineTo(kp[b][0], kp[b][1]);
+        ctx.stroke();
+      });
+      kp.forEach((_, j) => {
+        if (!ok(j)) return;
+        ctx.beginPath();
+        ctx.arc(kp[j][0], kp[j][1], lw * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    });
+  }
+
+  async function tick() {
+    const name = form.camera_name && form.camera_name.value;
     if (!previewOn) return;
-    previewTimer = setTimeout(() => {
-      const name = form.camera_name && form.camera_name.value;
-      if (!previewOn || !name || document.hidden) return nextFrame(500);
-      previewImg.src = `/cameras/${encodeURIComponent(name)}/snapshot.jpg?t=${Date.now()}`;
-    }, delay);
+    if (!name || document.hidden) return schedule(500);
+    const base = `/cameras/${encodeURIComponent(name)}/`;
+    try {
+      let img, persons = null, poseStatus = "";
+      if (poseToggle.checked) {
+        const res = await fetch(base + "pose.json", { credentials: "same-origin", cache: "no-store" });
+        if (!res.ok) throw new Error("camera");
+        const data = await res.json();
+        img = await loadImage(data.image);
+        persons = data.persons;
+        poseStatus = data.pose_status;
+      } else {
+        img = await loadImage(base + "snapshot.jpg?t=" + Date.now());
+      }
+      if (!previewOn) return;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      if (persons) drawPersons(ctx, persons, img.naturalWidth);
+      canvas.hidden = false;
+      previewStatus.textContent = !poseToggle.checked
+        ? "실시간 미리보기 (분석에는 쓰이지 않음)"
+        : persons
+          ? `실시간 미리보기 · 관절 표시 중 (검출된 사람 ${persons.length}명, 분석에는 쓰이지 않음)`
+          : POSE_STATUS[poseStatus] || `관절을 표시하지 못했습니다 (${poseStatus}).`;
+      schedule(poseStatus === "analysis_running" ? 1000 : 100);
+    } catch (err) {
+      if (!previewOn) return;
+      previewStatus.textContent = "카메라에 연결할 수 없습니다. 휴대폰 IP Webcam 앱이 켜져 있는지 확인하세요. 3초 뒤 다시 시도합니다.";
+      canvas.hidden = true;
+      schedule(3000);
+    }
+  }
+  function schedule(delay) {
+    clearTimeout(previewTimer);
+    if (previewOn) previewTimer = setTimeout(tick, delay);
   }
   function startPreview() {
-    if (!previewImg || previewOn) return;
+    if (!canvas || previewOn) return;
     previewOn = true;
-    nextFrame(0);
+    schedule(0);
   }
   function stopPreview() {
     previewOn = false;
     clearTimeout(previewTimer);
   }
-  if (previewImg) {
-    previewImg.addEventListener("load", () => {
-      previewStatus.textContent = "실시간 미리보기 (분석에는 쓰이지 않음)";
-      previewImg.hidden = false;
-      nextFrame(150);
-    });
-    previewImg.addEventListener("error", () => {
-      previewStatus.textContent = "카메라에 연결할 수 없습니다. 휴대폰 IP Webcam 앱이 켜져 있는지 확인하세요. 3초 뒤 다시 시도합니다.";
-      previewImg.hidden = true;
-      nextFrame(3000);
-    });
-    form.camera_name && form.camera_name.addEventListener("change", () => nextFrame(0));
+  if (canvas) {
+    form.camera_name && form.camera_name.addEventListener("change", () => schedule(0));
+    poseToggle.addEventListener("change", () => schedule(0));
   }
 
   // ── 작업 등록 ──

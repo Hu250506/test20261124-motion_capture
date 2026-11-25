@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from routers.pose import router as pose_router
 from routers.predictions import router as predictions_router
 from services.model_loader import load_resources
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Vision Action AI Service", lifespan=lifespan)
 app.include_router(predictions_router)
+app.include_router(pose_router)
 
 
 @app.get("/health")

@@ -1,5 +1,6 @@
 """HTML 화면: 사용자 분석 화면과 관리자 전용 대시보드(실제 DB 집계)."""
 
+import base64
 from urllib.parse import urlsplit
 
 import requests
@@ -7,7 +8,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.static import serve
 
@@ -33,6 +34,16 @@ def camera_snapshot(request, name):
     - IP Webcam 앱의 /shot.jpg를 쓴다. 같은 주소(host:port)만 호출하고 다른 곳으로의 이동(redirect)은 따라가지 않는다.
     - 연속 스트리밍이 아니라 짧은 요청이므로 gunicorn 작업자를 오래 붙잡지 않는다.
     """
+    jpg, error = _fetch_camera_shot(name)
+    if error:
+        return HttpResponse(error, status=502, content_type="text/plain")
+    res = HttpResponse(jpg, content_type="image/jpeg")
+    res["Cache-Control"] = "no-store"
+    return res
+
+
+def _fetch_camera_shot(name):
+    """허용 목록의 카메라에서 현재 화면 JPG를 받는다. (jpg, 오류 코드)를 돌려준다."""
     url = settings.ALLOWED_CAMERAS.get(name)
     if not url:
         raise Http404
@@ -41,10 +52,38 @@ def camera_snapshot(request, name):
     try:
         r = requests.get(shot_url, timeout=3, allow_redirects=False)
     except requests.RequestException:
-        return HttpResponse("camera_unreachable", status=502, content_type="text/plain")
+        return None, "camera_unreachable"
     if r.status_code != 200 or not r.headers.get("Content-Type", "").startswith("image/"):
-        return HttpResponse("camera_bad_response", status=502, content_type="text/plain")
-    res = HttpResponse(r.content, content_type="image/jpeg")
+        return None, "camera_bad_response"
+    return r.content, ""
+
+
+@login_required
+def camera_pose(request, name):
+    """카메라 현재 화면 + 그 화면의 관절 좌표(FastAPI)를 함께 돌려준다(스켈레톤 표시용).
+
+    사진과 관절이 같은 순간의 것이어야 화면에서 어긋나지 않으므로 한 응답에 담는다.
+    FastAPI가 바쁘거나(영상 분석 중) 꺼져 있으면 사진만 보내고 pose_status로 알린다.
+    """
+    jpg, error = _fetch_camera_shot(name)
+    if error:
+        return JsonResponse({"error": error}, status=502)
+    pose_status, persons = "ok", None
+    try:
+        r = requests.post(settings.AI_SERVICE_URL.rstrip("/") + "/predict/pose-frame",
+                          files={"file": ("frame.jpg", jpg, "image/jpeg")}, timeout=(2, 5))
+        if r.status_code == 200:
+            persons = r.json()["persons"]
+        else:
+            code = (r.json().get("detail") or {}).get("code") if r.headers.get("Content-Type", "").startswith("application/json") else None
+            pose_status = code or f"ai_http_{r.status_code}"
+    except (requests.RequestException, ValueError, KeyError):
+        pose_status = "ai_unavailable"
+    res = JsonResponse({
+        "image": "data:image/jpeg;base64," + base64.b64encode(jpg).decode(),
+        "pose_status": pose_status,
+        "persons": persons,
+    })
     res["Cache-Control"] = "no-store"
     return res
 
