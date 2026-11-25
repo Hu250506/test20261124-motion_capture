@@ -1,28 +1,25 @@
+"""서버 시작 시 17개 동작 모델과 설정을 한 번만 읽고, 입력 규격이 맞는지 검사한다.
+
+모델 폴더(기본 models/action17/)
+- action17_rf.joblib     : 학습된 RandomForest (training/train_action_model.py 결과)
+- feature_columns.json   : 모델 입력 Feature의 이름과 순서
+- training_info.json     : 클래스, Sequence 길이, 신뢰도 기준 등 학습 설정
+- action_labels.json     : (선택) {"A001": "동작 이름", ...}  없으면 ID만 표시
+"""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import joblib
 
+from services import action_features as af
 from src.common import load_config, resolve_device
-from src.realtime_utils import validate_runtime_values
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS_DIR = ROOT / "models"
-CONFIGS_DIR = ROOT / "configs"
-
-REQUIRED_RUNTIME_KEYS = [
-    "window_seconds",
-    "min_window_fill_ratio",
-    "min_valid_feature_ratio",
-    "min_valid_features",
-    "prediction_interval_sec",
-    "confidence_threshold",
-    "stabilization_buffer",
-    "stabilization_min_votes",
-]
+MODEL_DIR = Path(os.getenv("ACTION_MODEL_DIR", str(ROOT / "models" / "action17")))
 
 
 @dataclass(frozen=True)
@@ -31,10 +28,13 @@ class ModelResources:
     pose_weights_path: Path
     device: str
     project_config: dict
-    runtime_config: dict
-    sequence_steps: int
+    training_info: dict
     class_names: list
     feature_count: int
+    feature_index: list            # af.feature_names() 중 모델이 쓰는 열의 위치
+    sequence_steps: int
+    target_fps: float
+    action_names: dict = field(default_factory=dict)
 
 
 def _read_json(path: Path):
@@ -43,39 +43,34 @@ def _read_json(path: Path):
 
 
 def load_resources() -> ModelResources:
-    """서버 시작 시 한 번 호출해 모델과 설정을 읽고 입력 차원을 검사한다."""
     project_config = load_config()
-    runtime_config = _read_json(CONFIGS_DIR / "day07_realtime.json")
-    training_info = _read_json(MODELS_DIR / "rf_training_info.json")
-    feature_columns = _read_json(MODELS_DIR / "rf_feature_columns.json")
+    info = _read_json(MODEL_DIR / "training_info.json")
+    columns = _read_json(MODEL_DIR / "feature_columns.json")
+    model = joblib.load(MODEL_DIR / "action17_rf.joblib")
 
-    missing = [k for k in REQUIRED_RUNTIME_KEYS if k not in runtime_config]
-    if missing:
-        raise RuntimeError(f"day07_realtime.json에 없는 항목: {missing}")
-
-    validate_runtime_values(
-        window_seconds=float(runtime_config["window_seconds"]),
-        confidence_threshold=float(runtime_config["confidence_threshold"]),
-        stabilization_buffer=int(runtime_config["stabilization_buffer"]),
-        stabilization_min_votes=int(runtime_config["stabilization_min_votes"]),
-    )
-
-    sequence_steps = int(training_info["sequence_steps"])
-    expected_features = sequence_steps * 38
-
-    action_model = joblib.load(MODELS_DIR / "rf_action_baseline.joblib")
-    n_features = int(action_model.n_features_in_)
-    if not (n_features == expected_features == len(feature_columns)):
+    # 1) 학습 때와 지금의 Feature 계산 규격이 같은지 확인
+    if int(info["sequence_steps"]) != af.SEQUENCE_STEPS:
         raise RuntimeError(
-            "Feature 수 불일치: "
-            f"model={n_features}, sequence_steps*38={expected_features}, "
-            f"columns={len(feature_columns)}"
+            f"Sequence 길이 불일치: 학습={info['sequence_steps']}, 코드={af.SEQUENCE_STEPS}"
+        )
+    all_names = af.feature_names()
+    position = {name: i for i, name in enumerate(all_names)}
+    unknown = [c for c in columns if c not in position]
+    if unknown:
+        raise RuntimeError(f"action_features.py가 만들지 않는 Feature가 있습니다: {unknown[:5]}")
+    n_features = int(model.n_features_in_)
+    if not (n_features == len(columns) == int(info["n_features"])):
+        raise RuntimeError(
+            f"Feature 수 불일치: model={n_features}, columns={len(columns)}, info={info['n_features']}"
         )
 
-    class_names = [str(c) for c in action_model.classes_]
-    info_classes = training_info.get("classes")
-    if info_classes is not None and sorted(map(str, info_classes)) != sorted(class_names):
+    # 2) 클래스 확인
+    class_names = [str(c) for c in model.classes_]
+    if sorted(map(str, info["classes"])) != sorted(class_names):
         raise RuntimeError("학습 정보의 Class와 모델의 Class가 다릅니다.")
+
+    labels_path = MODEL_DIR / "action_labels.json"
+    action_names = _read_json(labels_path) if labels_path.exists() else {}
 
     pose_weights_path = Path(project_config["pose_model"])
     if not pose_weights_path.is_absolute():
@@ -84,12 +79,15 @@ def load_resources() -> ModelResources:
         raise RuntimeError(f"Pose 가중치 파일이 없습니다: {pose_weights_path}")
 
     return ModelResources(
-        action_model=action_model,
+        action_model=model,
         pose_weights_path=pose_weights_path,
         device=resolve_device(project_config["device"]),
         project_config=project_config,
-        runtime_config=runtime_config,
-        sequence_steps=sequence_steps,
+        training_info=info,
         class_names=class_names,
         feature_count=n_features,
+        feature_index=[position[c] for c in columns],
+        sequence_steps=af.SEQUENCE_STEPS,
+        target_fps=float(info.get("target_fps", 30)),
+        action_names=action_names,
     )

@@ -21,11 +21,17 @@ app.include_router(predictions_router)
 
 @app.get("/health")
 def health():
-    resources = app.state.resources
+    resources = getattr(app.state, "resources", None)
+    if resources is None:
+        return {"status": "loading", "model_ready": False}
     return {
         "status": "ok",
+        "model_ready": True,
+        "model_variant": resources.training_info.get("variant"),
         "classes": resources.class_names,
+        "action_names": resources.action_names,
         "sequence_steps": resources.sequence_steps,
         "feature_count": resources.feature_count,
-        "device": resources.device,
+        "target_fps": resources.target_fps,
+        "device": str(resources.device),
     }

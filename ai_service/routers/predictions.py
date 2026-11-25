@@ -29,20 +29,29 @@ class VideoInfo(BaseModel):
     height: int
 
 
+class TopPrediction(BaseModel):
+    action_label: str
+    confidence: float
+
+
 class PersonResult(BaseModel):
     track_id: int
     action_label: str
+    action_name: str | None = None
     confidence: float
-    prediction_count: int
+    uncertain: bool
+    top3: list[TopPrediction]
     frames_seen: int
+    valid_frames: int
     first_seen_sec: float
     last_seen_sec: float
-    label_counts: dict[str, int]
 
 
 class PredictResponse(BaseModel):
     video: VideoInfo
     person_count: int
+    skipped_tracks: int
+    processing_time_sec: float
     persons: list[PersonResult]
 
 

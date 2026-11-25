@@ -1,22 +1,28 @@
+"""영상 → YOLO Pose 추적 → 사람(Track ID)별 관절 시퀀스 → 17개 동작 예측.
+
+학습(training/extract_keypoints.py)과 같은 조건을 지킨다.
+- 프레임을 약 30fps로 샘플링 (60fps 영상이면 2프레임마다 1장)
+- 같은 Pose 가중치(yolo11n-pose.pt)와 사람 검출 기준(conf 0.25)
+- 관절 → Feature 계산은 services/action_features.py (학습과 같은 코드)
+
+학습 영상은 한 사람씩 찍었으므로, 여러 사람이 나오면 Track ID별로 따로 예측한다.
+"""
 from __future__ import annotations
 
 import math
 import threading
+import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
-from src.multi_person_utils import (
-    MultiPersonStateManager,
-    feature_from_keypoints,
-)
-from src.realtime_utils import predict_from_window
 from services.action_inference import summarize_persons
 from services.model_loader import ModelResources
 
 TRACKER = "bytetrack.yaml"
-LOST_TIMEOUT_SECONDS = 2.0
+MIN_VIDEO_SECONDS = 1.0
 
 # 한 번에 영상 하나만 분석한다(CPU·메모리 급증 방지).
 _ANALYSIS_LOCK = threading.Lock()
@@ -52,21 +58,16 @@ class InsufficientSequenceError(VideoAnalysisError):
     code = "insufficient_sequence"
 
 
-def analyze_video(
-    video_path: str | Path,
-    resources: ModelResources,
-    max_seconds: float = 60.0,
-) -> dict:
+def analyze_video(video_path: str | Path, resources: ModelResources, max_seconds: float = 60.0) -> dict:
     with _ANALYSIS_LOCK:
-        return _analyze(Path(video_path), resources, max_seconds)
+        started = time.perf_counter()
+        result = _analyze(Path(video_path), resources, max_seconds)
+        result["processing_time_sec"] = round(time.perf_counter() - started, 2)
+        return result
 
 
 def _analyze(video_path: Path, resources: ModelResources, max_seconds: float) -> dict:
-    cfg = resources.runtime_config
     project = resources.project_config
-
-    window_seconds = float(cfg["window_seconds"])
-    min_required = window_seconds * float(cfg["min_window_fill_ratio"])
 
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -88,133 +89,70 @@ def _analyze(video_path: Path, resources: ModelResources, max_seconds: float) ->
             raise VideoTooLongError(
                 f"영상이 너무 깁니다({duration:.1f}초). 최대 {max_seconds:.0f}초까지 분석합니다."
             )
-        if duration < min_required:
+        if duration < MIN_VIDEO_SECONDS:
             capture.release()
             raise VideoTooShortError(
-                f"영상이 너무 짧습니다({duration:.1f}초). "
-                f"최소 {min_required:.1f}초 이상이어야 합니다."
+                f"영상이 너무 짧습니다({duration:.1f}초). 최소 {MIN_VIDEO_SECONDS:.0f}초 이상이어야 합니다."
             )
 
+    step = max(1, round(fps / resources.target_fps))
     # 요청마다 새 모델 객체를 써서 이전 영상의 Tracker 상태가 섞이지 않게 한다.
     pose_model = YOLO(str(resources.pose_weights_path))
 
-    manager = MultiPersonStateManager(
-        window_seconds=window_seconds,
-        stabilization_buffer=int(cfg["stabilization_buffer"]),
-        stabilization_min_votes=int(cfg["stabilization_min_votes"]),
-        lost_timeout_seconds=LOST_TIMEOUT_SECONDS,
-    )
-
     records: dict[int, dict] = {}
     frame_index = 0
-
     try:
         while True:
             success, frame = capture.read()
             if not success or frame is None:
                 break
-
             now = frame_index / fps
-            result = pose_model.track(
-                source=frame,
-                persist=True,
-                tracker=TRACKER,
-                imgsz=int(project["image_size"]),
-                conf=float(project["person_confidence"]),
-                device=resources.device,
-                verbose=False,
-            )[0]
-
-            seen_ids: set[int] = set()
-            boxes = result.boxes
-            keypoints = result.keypoints
-
-            if (
-                boxes is not None
-                and boxes.id is not None
-                and keypoints is not None
-                and keypoints.xy is not None
-            ):
-                track_ids = boxes.id.detach().cpu().numpy().astype(int)
-                kp_xy = keypoints.xy.detach().cpu().numpy()
-
-                for index in range(min(len(track_ids), len(kp_xy))):
-                    track_id = int(track_ids[index])
-                    seen_ids.add(track_id)
-
-                    state = manager.get_or_create(track_id, now)
-                    record = records.setdefault(
-                        track_id,
-                        {
-                            "first_seen": now,
-                            "last_seen": now,
-                            "frames": 0,
-                            "predictions": [],
-                        },
-                    )
-                    record["last_seen"] = now
-                    record["frames"] += 1
-
-                    state.feature_buffer.append(
-                        now, feature_from_keypoints(kp_xy[index])
-                    )
-
-                    ready = state.feature_buffer.is_ready(
-                        min_window_fill_ratio=float(cfg["min_window_fill_ratio"]),
-                        min_valid_feature_ratio=float(cfg["min_valid_feature_ratio"]),
-                        min_valid_features=int(cfg["min_valid_features"]),
-                    )
-                    interval = float(cfg["prediction_interval_sec"])
-
-                    if ready and (now - state.last_prediction_time) >= interval:
-                        try:
-                            label, raw_label, confidence, _ = predict_from_window(
-                                model=resources.action_model,
-                                feature_buffer=state.feature_buffer,
-                                sequence_steps=resources.sequence_steps,
-                                confidence_threshold=float(cfg["confidence_threshold"]),
-                            )
-                        except ValueError:
-                            continue
-                        state.last_prediction_time = now
-                        record["predictions"].append(
-                            {
-                                "time": now,
-                                "label": label,
-                                "raw_label": raw_label,
-                                "confidence": float(confidence),
-                            }
-                        )
-
-            manager.mark_missing(now, seen_ids)
-            manager.remove_lost(now)
-            frame_index += 1
-
             if frame_count <= 0 and now > max_seconds:
-                raise VideoTooLongError(
-                    f"영상이 너무 깁니다. 최대 {max_seconds:.0f}초까지 분석합니다."
-                )
+                raise VideoTooLongError(f"영상이 너무 깁니다. 최대 {max_seconds:.0f}초까지 분석합니다.")
+
+            if frame_index % step == 0:
+                result = pose_model.track(
+                    source=frame,
+                    persist=True,
+                    tracker=TRACKER,
+                    imgsz=int(project["image_size"]),
+                    conf=float(project["person_confidence"]),
+                    device=resources.device,
+                    verbose=False,
+                )[0]
+                boxes, keypoints = result.boxes, result.keypoints
+                if boxes is not None and boxes.id is not None and keypoints is not None:
+                    ids = boxes.id.cpu().numpy().astype(int)
+                    xy = keypoints.xy.cpu().numpy()
+                    kconf = (
+                        keypoints.conf.cpu().numpy()
+                        if keypoints.conf is not None
+                        else np.zeros(xy.shape[:2], np.float32)
+                    )
+                    for i in range(min(len(ids), len(xy))):
+                        rec = records.setdefault(int(ids[i]), {"kp": [], "conf": [], "t": []})
+                        rec["kp"].append(xy[i])
+                        rec["conf"].append(kconf[i])
+                        rec["t"].append(now)
+            frame_index += 1
     finally:
         capture.release()
 
     if frame_index == 0:
         raise VideoOpenError("영상에서 Frame을 읽지 못했습니다.")
-
     duration = frame_index / fps
-    if frame_count <= 0 and duration < min_required:
+    if frame_count <= 0 and duration < MIN_VIDEO_SECONDS:
         raise VideoTooShortError(
-            f"영상이 너무 짧습니다({duration:.1f}초). "
-            f"최소 {min_required:.1f}초 이상이어야 합니다."
+            f"영상이 너무 짧습니다({duration:.1f}초). 최소 {MIN_VIDEO_SECONDS:.0f}초 이상이어야 합니다."
         )
-
     if not records:
         raise NoPersonDetectedError("영상에서 사람을 찾지 못했습니다.")
 
-    persons = summarize_persons(records)
+    persons, skipped = summarize_persons(records, resources)
     if not persons:
         raise InsufficientSequenceError(
-            "사람은 보이지만 동작을 판단할 만큼 충분한 구간이 없습니다. "
-            "사람이 더 오래, 선명하게 보이는 영상을 사용하세요."
+            "사람은 보이지만 동작을 판단할 만큼 관절이 충분히 보이지 않습니다. "
+            "전신이 더 오래, 선명하게 보이는 영상을 사용하세요."
         )
 
     return {
@@ -226,5 +164,6 @@ def _analyze(video_path: Path, resources: ModelResources, max_seconds: float) ->
             "height": height,
         },
         "person_count": len(persons),
+        "skipped_tracks": skipped,
         "persons": persons,
     }

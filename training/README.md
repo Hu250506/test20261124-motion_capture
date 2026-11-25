@@ -60,6 +60,31 @@ python3 training/train_action_model.py     # → ai_service/models/action17/, tr
 - `feature_columns.json`: 입력 1,543개의 이름과 순서
 - `training_info.json`: 클래스, Sequence 길이, 신뢰도 기준, sklearn 버전 등
 
+## FastAPI 연결 (`ai_service/`)
+
+```bash
+cd ai_service && uvicorn main:app --port 8001     # http://localhost:8001/docs
+```
+
+- `GET /health`: 모델 준비 여부, 클래스 17개, Feature 1,543개
+- `POST /predict/video`: 영상을 받아 사람(Track ID)별로 결과를 돌려준다. 결과 항목은 `action_label`, `confidence`, `uncertain`, `top3`, `valid_frames`이고, 응답에 처리 시간도 들어 있다.
+- `uncertain`: 신뢰도가 0.3보다 낮으면 `true`다. 사람 단위 평가에서 0.3 미만 예측의 정답률은 0.59였고 0.3 이상은 0.88~1.00이었다.
+- 동작 이름 표시: `ai_service/models/action17/action_labels.json`에 `{"A001": "이름", ...}`을 두면 `action_name`에 들어간다.
+- 모델 폴더는 환경변수 `ACTION_MODEL_DIR`로 바꿀 수 있다.
+
+### 검증 결과
+
+| 입력 | 결과 |
+|---|---|
+| 학습 영상 3개 (S05_A009_T01 등) | API 예측과 신뢰도가 학습 방식(`data/keypoints` → 같은 모델)과 정확히 일치 |
+| 서로 다른 사람 2명을 나란히 붙인 영상 | Track ID 1, 2로 따로 예측 |
+| 검은 화면 3초 | 422 `no_person_detected` |
+| 0.5초 영상 | 422 `video_too_short` |
+| 영상이 아닌 `.mp4` | 400 `video_open_failed` |
+| `.txt` 파일 | 400 `unsupported_file_type` |
+
+처리 시간은 CPU 기준으로 5초 영상 한 건에 약 5~8초 걸린다. 첫 요청은 준비 시간 때문에 더 오래 걸린다.
+
 ## 주의
 
 - 기존 모델의 `person_clip_acc 0.906`과 이 결과를 바로 비교하지 않는다. 평가 방식과 Feature가 다르다.
