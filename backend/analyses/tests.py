@@ -79,7 +79,8 @@ class CreateAndScopeTests(Base):
         self.client.force_authenticate(self.a)
         res = self.client.post("/api/v1/analyses/", {"input_type": "CAMERA", "camera_name": "lab-phone"}, format="multipart")
         self.assertEqual(res.status_code, 202)
-        self.assertEqual(AnalysisJob.objects.get().capture_seconds, 8)
+        from django.conf import settings
+        self.assertEqual(AnalysisJob.objects.get().capture_seconds, settings.CAMERA_CAPTURE_SECONDS)
 
     def test_user_sees_only_own_jobs(self, delay):
         mine, theirs = self.create_job(self.a), self.create_job(self.b)
