@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}AI 동작 분석{% endblock %}
+{% block content %}
+<div class="grid">
+  <section class="card">
+    <h1>AI 동작 분석</h1>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab active" data-mode="UPLOAD" role="tab">영상 업로드</button>
+      <button type="button" class="tab" data-mode="CAMERA" role="tab">IP Webcam</button>
+    </div>
+
+    <form id="analysis-form" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="input_type" value="UPLOAD">
+
+      <div class="mode mode-UPLOAD">
+        <label>영상 파일 (MP4 등, 최대 {{ max_upload_mb }}MB)
+          <input type="file" name="video" accept="video/*">
+        </label>
+      </div>
+
+      <div class="mode mode-CAMERA" hidden>
+        {% if cameras %}
+          <label>카메라
+            <select name="camera_name">{% for c in cameras %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+          </label>
+          <label>수집 시간(초)
+            <input type="number" name="capture_seconds" min="3" max="15" step="1" value="{{ capture_seconds|floatformat:0 }}">
+          </label>
+          <p class="muted">‘AI 분석 시작’을 누르면 서버가 카메라에 연결해 정해진 시간 동안 영상을 모읍니다. 그동안 카메라 앞에서 동작을 하세요.</p>
+        {% else %}
+          <p class="error">설정된 카메라가 없습니다. 관리자가 .env의 ALLOWED_CAMERAS에 카메라를 등록해야 합니다.</p>
+        {% endif %}
+      </div>
+
+      <label>제목 (선택) <input type="text" name="title" maxlength="100"></label>
+      <label>수행한 동작 (선택, 비교용이며 정답으로 쓰지 않음)
+        <select name="expected_action"><option value="">선택 안 함</option>{% for a in actions %}<option>{{ a }}</option>{% endfor %}</select>
+      </label>
+
+      <button type="submit" class="primary" id="start-btn">AI 분석 시작</button>
+      <p class="error" id="form-error" hidden></p>
+    </form>
+  </section>
+
+  <section class="card" id="current" hidden>
+    <h2>현재 작업 <span id="job-id"></span></h2>
+    <ol class="steps" id="steps">
+      <li data-s="PENDING">대기</li><li data-s="PROCESSING">처리 중</li><li data-s="DONE">완료 / 실패</li>
+    </ol>
+    <p id="status-line" class="status"></p>
+    <div id="result"></div>
+  </section>
+</div>
+
+<section class="card">
+  <h2>최근 분석 이력</h2>
+  <table class="table" id="history">
+    <thead><tr><th>#</th><th>제목</th><th>입력</th><th>상태</th><th>예측 결과</th><th>생성</th><th></th></tr></thead>
+    <tbody><tr><td colspan="7" class="muted">불러오는 중…</td></tr></tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/analyses.js' %}"></script>
+{% endblock %}

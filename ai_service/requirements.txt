@@ -2,11 +2,10 @@ numpy==2.5.4
 scikit-learn==1.9.1
 joblib==1.6.0
 opencv-python-headless==5.0.0.93
-ultralytics==8.4.211
+ultralytics==8.4.218
 torch==2.15.0
 torchvision==0.29.2
 lap==0.5.14
 fastapi
 uvicorn[standard]
 python-multipart
-pandas==3.1.1

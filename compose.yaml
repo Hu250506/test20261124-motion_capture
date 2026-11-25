@@ -1,4 +1,17 @@
+# Vision Action Platform: 5개 서비스
+#   postgres  영구 DB (사용자·분석 작업·사람별 예측)
+#   redis     Celery 작업 대기열
+#   fastapi   AI 추론 (YOLO Pose + 17개 동작 RandomForest)
+#   django    웹 화면·회원·DRF API·관리자
+#   celery    비동기 분석 실행 (영상 확보 → FastAPI 호출 → ORM 저장)
+# 컨테이너끼리는 localhost가 아니라 서비스 이름(postgres, redis, fastapi)으로 접속한다.
 name: vision_action_platform
+
+x-backend-env: &backend-env
+  POSTGRES_HOST: postgres
+  REDIS_URL: redis://redis:6379/0
+  AI_SERVICE_URL: http://fastapi:8001
+  MEDIA_ROOT: /app/media
 
 services:
   postgres:
@@ -23,7 +36,10 @@ services:
     restart: unless-stopped
 
   fastapi:
-    build: ./ai_service
+    build:
+      context: ./ai_service
+      args:
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     environment:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
       MAX_VIDEO_SECONDS: ${MAX_VIDEO_SECONDS:-60}
@@ -44,11 +60,7 @@ services:
              python manage.py collectstatic --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"
     env_file: .env
-    environment:
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      AI_SERVICE_URL: http://fastapi:8001
-      MEDIA_ROOT: /app/media
+    environment: *backend-env
     volumes:
       - media_data:/app/media
     ports:
@@ -64,22 +76,16 @@ services:
     build: ./backend
     command: celery -A config worker -l info --concurrency=1
     env_file: .env
-    environment:
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      AI_SERVICE_URL: http://fastapi:8001
-      MEDIA_ROOT: /app/media
+    environment: *backend-env
     volumes:
-      - media_data:/app/media
+      - media_data:/app/media   # django가 저장한 업로드 영상을 같은 경로에서 읽는다
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       fastapi:
-        condition: service_started
-      django:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
