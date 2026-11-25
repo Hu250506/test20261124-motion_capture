@@ -9,24 +9,46 @@ from django.db import models
 
 
 # 무인 매장 CCTV 이상행동 17종. ai_service/models/action17/action_labels.json과 같은 내용을 유지한다.
+# 번호(A001~A017)는 모델이 학습한 클래스라서 바꾸지 않는다. 이름만 바꿀 때는 재학습이 필요 없다.
 ACTION_NAMES = {
-    "A001": "키오스크 내려치기",
-    "A002": "한팔로 물건 던지기",
-    "A003": "냉동고 앞차기",
-    "A004": "뽑기기계 흔들기",
+    "A001": "키오스크 두드리기",
+    "A002": "한손 물건 던지기",
+    "A003": "앞차기",
+    "A004": "잡고 흔들기",
     "A005": "밀치기",
-    "A006": "한손 휘두르기",
-    "A007": "매트 위에 앉기",
-    "A008": "의자 위에 점프해서 앉아 폰보기",
-    "A009": "앞으로 누워서 폰보기",
-    "A010": "뒤로 누워서 폰보기",
-    "A011": "몸통박치기",
-    "A012": "무릎꿇고 앉아 인형빼기",
-    "A013": "테이블 내려치기",
-    "A014": "구토하기",
-    "A015": "벽에 기대어 잠자기",
-    "A016": "뒤로 기절하기",
-    "A017": "장애물 걸려 앞으로 넘어지기",
+    "A006": "휘두르기",
+    "A007": "바닥에 앉기",
+    "A008": "위에 앉기",
+    "A009": "앞으로 눕기",
+    "A010": "뒤로 눕기",
+    "A011": "몸통 박치기",
+    "A012": "쪼그려 물건 빼내기",
+    "A013": "샷건",
+    "A014": "구토",
+    "A015": "옆으로 쓰러지기",
+    "A016": "뒤로 넘어지기",
+    "A017": "앞으로 넘어지기",
+}
+
+# 영어 이름(action_key). ai_service/models/action17/action_keys.json과 같은 내용을 유지한다.
+ACTION_KEYS = {
+    "A001": "kiosk_tap",
+    "A002": "throw_one_hand",
+    "A003": "front_kick",
+    "A004": "grab_shake",
+    "A005": "push",
+    "A006": "swing",
+    "A007": "sit_floor",
+    "A008": "sit_on_object",
+    "A009": "lie_forward",
+    "A010": "lie_backward",
+    "A011": "body_slam",
+    "A012": "crouch_take_item",
+    "A013": "shotgun",
+    "A014": "vomit",
+    "A015": "fall_sideways",
+    "A016": "fall_backward",
+    "A017": "fall_forward",
 }
 ACTION_CHOICES = [(code, f"{code} {name}") for code, name in ACTION_NAMES.items()]
 
@@ -90,6 +112,7 @@ class PersonPrediction(models.Model):
     track_id = models.PositiveIntegerField("Track ID")
     action_label = models.CharField("예측 동작", max_length=10, db_index=True)
     action_name = models.CharField("동작 이름", max_length=100, blank=True)
+    action_key = models.CharField("동작 영어 이름", max_length=40, blank=True)
     confidence = models.FloatField("신뢰도")
     uncertain = models.BooleanField("판단 불확실", default=False)
     top3 = models.JSONField(default=list, blank=True)

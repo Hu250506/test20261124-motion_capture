@@ -95,6 +95,8 @@ erDiagram
         bigint job_id FK
         int track_id "작업 안에서만 유효"
         string action_label "A001~A017"
+        string action_name "한국어 이름"
+        string action_key "영어 이름 (kiosk_tap 등)"
         float confidence
         bool uncertain "신뢰도 0.3 미만"
         json top3
@@ -153,17 +155,28 @@ sequenceDiagram
   - 이를 30 Step 시퀀스(1,320)로 만들고, 영상 전체 요약 통계(220)와 골반 이동량(3)을 붙임
   - Feature 계산 코드 `ai_service/services/action_features.py`를 학습과 추론이 함께 씀
 - **학습·평가**: 5명 × 17동작 × 최대 3방향, 영상 238개. 사람 단위 교차검증(Leave-One-Subject-Out)으로 정확도 **0.782**, Macro F1 **0.777** (자세한 내용은 [`training/README.md`](training/README.md))
-- **FastAPI 입출력**: `POST /predict/video`에 영상 파일을 보내면 `persons[]`에 `track_id`, `action_label`, `confidence`, `uncertain`, `top3`, `valid_frames`를 담아 돌려줌. 처리할 수 없으면 오류 코드를 돌려줌: `no_person_detected`, `video_too_short`, `video_open_failed`, `insufficient_sequence`
-- **행동 목록** (`ai_service/models/action17/action_labels.json`, `backend/analyses/models.py`의 `ACTION_NAMES`)
+- **FastAPI 입출력**: `POST /predict/video`에 영상 파일을 보내면 `persons[]`에 `track_id`, `action_label`, `action_name`, `action_key`, `confidence`, `uncertain`, `top3`, `valid_frames`를 담아 돌려줌. 처리할 수 없으면 오류 코드를 돌려줌: `no_person_detected`, `video_too_short`, `video_open_failed`, `insufficient_sequence`
+- **행동 목록**: 한국어 이름은 `ai_service/models/action17/action_labels.json`과 `backend/analyses/models.py`의 `ACTION_NAMES`, 영어 이름은 `action_keys.json`과 `ACTION_KEYS`에 있습니다. 두 쌍이 같은지는 테스트(`ActionLabelTests`)가 검사합니다. 모델은 번호(`A001`~`A017`)로 학습했으므로 이름만 바꿀 때는 다시 학습하지 않아도 됩니다.
 
-| ID | 행동 | ID | 행동 | ID | 행동 |
-|---|---|---|---|---|---|
-| A001 | 키오스크 내려치기 | A007 | 매트 위에 앉기 | A013 | 테이블 내려치기 |
-| A002 | 한팔로 물건 던지기 | A008 | 의자 위에 점프해서 앉아 폰보기 | A014 | 구토하기 |
-| A003 | 냉동고 앞차기 | A009 | 앞으로 누워서 폰보기 | A015 | 벽에 기대어 잠자기 |
-| A004 | 뽑기기계 흔들기 | A010 | 뒤로 누워서 폰보기 | A016 | 뒤로 기절하기 |
-| A005 | 밀치기 | A011 | 몸통박치기 | A017 | 장애물 걸려 앞으로 넘어지기 |
-| A006 | 한손 휘두르기 | A012 | 무릎꿇고 앉아 인형빼기 | | |
+| ID | 행동 | 영어 이름(`action_key`) |
+|---|---|---|
+| A001 | 키오스크 두드리기 | `kiosk_tap` |
+| A002 | 한손 물건 던지기 | `throw_one_hand` |
+| A003 | 앞차기 | `front_kick` |
+| A004 | 잡고 흔들기 | `grab_shake` |
+| A005 | 밀치기 | `push` |
+| A006 | 휘두르기 | `swing` |
+| A007 | 바닥에 앉기 | `sit_floor` |
+| A008 | 위에 앉기 | `sit_on_object` |
+| A009 | 앞으로 눕기 | `lie_forward` |
+| A010 | 뒤로 눕기 | `lie_backward` |
+| A011 | 몸통 박치기 | `body_slam` |
+| A012 | 쪼그려 물건 빼내기 | `crouch_take_item` |
+| A013 | 샷건 | `shotgun` |
+| A014 | 구토 | `vomit` |
+| A015 | 옆으로 쓰러지기 | `fall_sideways` |
+| A016 | 뒤로 넘어지기 | `fall_backward` |
+| A017 | 앞으로 넘어지기 | `fall_forward` |
 
 > 모델은 학습한 17개 행동 중 하나로만 답합니다. 정상적인 손님 행동도 그중 하나로 나올 수 있으므로, 예측을 곧바로 이상행동 확정으로 보지 않고 신뢰도와 영상을 함께 확인하는 **검토 대상 알림**으로 씁니다. 학습에 참여한 사람이 5명뿐이라 새로운 사람·환경에서는 정확도가 낮을 수 있습니다.
 

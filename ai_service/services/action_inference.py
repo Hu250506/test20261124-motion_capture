@@ -34,6 +34,7 @@ def predict_person(track_id: int, record: dict, resources: ModelResources) -> di
         "track_id": int(track_id),
         "action_label": label,
         "action_name": resources.action_names.get(label),
+        "action_key": resources.action_keys.get(label),
         "confidence": round(confidence, 4),
         "uncertain": confidence < UNCERTAIN_BELOW,
         "top3": [

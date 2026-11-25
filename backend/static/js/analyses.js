@@ -232,7 +232,7 @@
       const top = p.top3.map((t) => `${esc(t.action_label)} ${esc(ACTION_NAMES[t.action_label] || "")} ${Math.round(t.confidence * 100)}%`).join(" · ");
       return `<tr>
         <td>${p.track_id}</td>
-        <td><strong>${esc(p.action_label)}</strong>${p.action_name ? " " + esc(p.action_name) : ""}
+        <td><strong>${esc(p.action_label)}</strong>${p.action_name ? " " + esc(p.action_name) : ""}${p.action_key ? ` <span class="muted">(${esc(p.action_key)})</span>` : ""}
             ${p.uncertain ? '<span class="badge warn">판단 불확실</span>' : ""}</td>
         <td><div class="bar"><span style="width:${pct}%"></span></div>${pct}%</td>
         <td class="muted">${top}</td>

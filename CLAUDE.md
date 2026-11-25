@@ -24,7 +24,7 @@
 ## 모델: 바꾸기 전에 반드시 알아야 할 것
 - 강사 문서의 6클래스·1,140 Feature 모델이 아니다. **17클래스·1,543 Feature** 모델을 원본 영상으로 다시 학습했다. 기존 `clip_model.joblib`과 `action_model.joblib`은 Feature 계산 코드가 없어서 쓰지 못했다.
 - `ai_service/services/action_features.py`는 **학습과 추론이 같이 쓰는 코드**다. 여기를 바꾸면 `training/train_action_model.py`로 반드시 다시 학습하고, `ai_service/models/action17/`을 함께 커밋한다. 바꾸지 않고 두는 것이 기본이다.
-- 행동 이름은 두 곳에 있고 **같아야 한다**: `ai_service/models/action17/action_labels.json`, `backend/analyses/models.py`의 `ACTION_NAMES`. 이 둘이 같은지는 테스트(`ActionLabelTests`)가 검사한다.
+- 행동 이름은 두 곳에 있고 **같아야 한다**: 한국어는 `ai_service/models/action17/action_labels.json` ↔ `backend/analyses/models.py`의 `ACTION_NAMES`, 영어(`action_key`, 예: `kiosk_tap`)는 `action_keys.json` ↔ `ACTION_KEYS`. 같은지는 테스트(`ActionLabelTests`)가 검사한다. 번호(A001~A017)는 바꾸지 않는다(모델 클래스). 이름을 바꾸면 저장된 `PersonPrediction`도 데이터 마이그레이션으로 고친다(0003 참고).
 - 평가는 사람 단위(Leave-One-Subject-Out)로 했다. 정확도 0.782, Macro F1 0.777. 같은 사람의 영상이 학습과 평가에 섞이면 안 된다.
 - `uncertain`(판단 불확실) 기준은 신뢰도 0.3이다. 근거는 `training/results/loso_predictions.csv`의 구간별 정답률이다.
 - 예측은 '이상행동 확정'이 아니라 '검토 대상 알림'으로 표현한다.

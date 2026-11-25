@@ -4,7 +4,8 @@
 - action17_rf.joblib     : 학습된 RandomForest (training/train_action_model.py 결과)
 - feature_columns.json   : 모델 입력 Feature의 이름과 순서
 - training_info.json     : 클래스, Sequence 길이, 신뢰도 기준 등 학습 설정
-- action_labels.json     : (선택) {"A001": "동작 이름", ...}  없으면 ID만 표시
+- action_labels.json     : (선택) {"A001": "한국어 이름", ...}  없으면 ID만 표시
+- action_keys.json       : (선택) {"A001": "kiosk_tap", ...}   영어 이름(action_key)
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ class ModelResources:
     sequence_steps: int
     target_fps: float
     action_names: dict = field(default_factory=dict)
+    action_keys: dict = field(default_factory=dict)
 
 
 def _read_json(path: Path):
@@ -71,6 +73,8 @@ def load_resources() -> ModelResources:
 
     labels_path = MODEL_DIR / "action_labels.json"
     action_names = _read_json(labels_path) if labels_path.exists() else {}
+    keys_path = MODEL_DIR / "action_keys.json"
+    action_keys = _read_json(keys_path) if keys_path.exists() else {}
 
     pose_weights_path = Path(project_config["pose_model"])
     if not pose_weights_path.is_absolute():
@@ -90,4 +94,5 @@ def load_resources() -> ModelResources:
         sequence_steps=af.SEQUENCE_STEPS,
         target_fps=float(info.get("target_fps", 30)),
         action_names=action_names,
+        action_keys=action_keys,
     )

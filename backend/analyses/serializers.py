@@ -9,7 +9,7 @@ from .models import AnalysisJob, PersonPrediction
 class PersonPredictionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PersonPrediction
-        fields = ["track_id", "action_label", "action_name", "confidence", "uncertain", "top3",
+        fields = ["track_id", "action_label", "action_name", "action_key", "confidence", "uncertain", "top3",
                   "frames_seen", "valid_frames", "first_seen_sec", "last_seen_sec"]
         read_only_fields = fields
 

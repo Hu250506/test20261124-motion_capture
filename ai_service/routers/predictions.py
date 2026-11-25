@@ -38,6 +38,7 @@ class PersonResult(BaseModel):
     track_id: int
     action_label: str
     action_name: str | None = None
+    action_key: str | None = None
     confidence: float
     uncertain: bool
     top3: list[TopPrediction]

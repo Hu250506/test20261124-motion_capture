@@ -13,7 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .camera_capture import CameraError, capture_clip
-from .models import ACTION_NAMES, AnalysisJob, PersonPrediction
+from .models import ACTION_KEYS, ACTION_NAMES, AnalysisJob, PersonPrediction
 from .services import AIServiceError, predict_video
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,7 @@ def run_analysis(self, job_id: int):
                     track_id=p["track_id"],
                     action_label=p["action_label"],
                     action_name=p.get("action_name") or ACTION_NAMES.get(p["action_label"], ""),
+                    action_key=p.get("action_key") or ACTION_KEYS.get(p["action_label"], ""),
                     confidence=p["confidence"],
                     uncertain=p.get("uncertain", p["confidence"] < settings.UNCERTAIN_BELOW),
                     top3=p.get("top3", []),

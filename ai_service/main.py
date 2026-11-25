@@ -32,6 +32,7 @@ def health():
         "model_variant": resources.training_info.get("variant"),
         "classes": resources.class_names,
         "action_names": resources.action_names,
+        "action_keys": resources.action_keys,
         "sequence_steps": resources.sequence_steps,
         "feature_count": resources.feature_count,
         "target_fps": resources.target_fps,

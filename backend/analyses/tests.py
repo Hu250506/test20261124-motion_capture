@@ -135,6 +135,17 @@ class ActionLabelTests(TestCase):
             self.skipTest("ai_service 폴더가 없는 환경(backend 컨테이너)")
         self.assertEqual(json.loads(path.read_text(encoding="utf-8")), ACTION_NAMES)
 
+    def test_keys_match_ai_service_file(self):
+        """영어 이름(ACTION_KEYS)도 FastAPI의 action_keys.json과 같아야 한다."""
+        import json
+        from pathlib import Path
+        from .models import ACTION_KEYS, ACTION_NAMES
+        self.assertEqual(set(ACTION_KEYS), set(ACTION_NAMES))
+        path = Path(__file__).resolve().parents[2] / "ai_service" / "models" / "action17" / "action_keys.json"
+        if not path.exists():
+            self.skipTest("ai_service 폴더가 없는 환경(backend 컨테이너)")
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), ACTION_KEYS)
+
 
 class QueueDownTests(Base):
     @mock.patch("analyses.views.run_analysis.delay", side_effect=ConnectionError("redis down"))
@@ -155,8 +166,8 @@ class TaskTests(Base):
         job.refresh_from_db()
         self.assertEqual(job.status, "COMPLETED")
         self.assertEqual(job.ai_processing_sec, 3.2)
-        preds = list(job.predictions.values_list("track_id", "action_label", "action_name", "uncertain"))
-        self.assertEqual(preds, [(1, "A003", "냉동고 앞차기", False), (2, "A010", "뒤로 누워서 폰보기", True)])
+        preds = list(job.predictions.values_list("track_id", "action_label", "action_name", "action_key", "uncertain"))
+        self.assertEqual(preds, [(1, "A003", "앞차기", "front_kick", False), (2, "A010", "뒤로 눕기", "lie_backward", True)])
 
     @mock.patch("analyses.tasks.predict_video", side_effect=AIServiceError("ai_unreachable", "AI 서버에 연결할 수 없습니다."))
     def test_ai_down_marks_failed(self, predict):

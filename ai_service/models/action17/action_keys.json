@@ -1,0 +1,19 @@
+{
+  "A001": "kiosk_tap",
+  "A002": "throw_one_hand",
+  "A003": "front_kick",
+  "A004": "grab_shake",
+  "A005": "push",
+  "A006": "swing",
+  "A007": "sit_floor",
+  "A008": "sit_on_object",
+  "A009": "lie_forward",
+  "A010": "lie_backward",
+  "A011": "body_slam",
+  "A012": "crouch_take_item",
+  "A013": "shotgun",
+  "A014": "vomit",
+  "A015": "fall_sideways",
+  "A016": "fall_backward",
+  "A017": "fall_forward"
+}
